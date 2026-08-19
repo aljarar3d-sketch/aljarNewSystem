@@ -1,3 +1,4 @@
+import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import prisma from '@/lib/prisma';
 import { isAssetViewable } from '@/lib/asset-viewable';
@@ -16,7 +17,21 @@ export default async function AssetArPage({ params }: PageProps) {
     notFound();
   }
 
-  const publicUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? ''}/ar/${asset!.id}`;
+  // These QR codes get printed on physical packaging, so a silently-relative
+  // URL is far worse than a hard failure. Deriving the origin from the incoming
+  // request avoids that and avoids `NEXT_PUBLIC_*` build-time inlining, which
+  // would bake a stale origin into the bundle at build time.
+  const requestHeaders = await headers();
+  const host = requestHeaders.get('host');
+
+  if (!host) {
+    throw new Error('Cannot build the public AR URL: the request has no Host header.');
+  }
+
+  // `x-forwarded-proto` can be a comma-separated chain when several proxies are
+  // involved; the first entry is the one the client actually spoke.
+  const protocol = (requestHeaders.get('x-forwarded-proto') ?? 'https').split(',')[0].trim();
+  const publicUrl = `${protocol}://${host}/ar/${asset!.id}`;
 
   return (
     <main
