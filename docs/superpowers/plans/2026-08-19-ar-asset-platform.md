@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Next.js App Router + TypeScript, no `src/` directory, import alias `@/*`.
-- PostgreSQL via Prisma; target host is Vercel Postgres (Neon-backed) — schema must define both `url` (pooled) and `directUrl` (for migrations).
+- PostgreSQL via Prisma; target host is Vercel Postgres (Neon-backed). **Amended after Task 2** (installed `prisma@7.9.1` dropped `datasource.url`/`directUrl` from `schema.prisma` — verified via actual CLI errors, not assumed): `schema.prisma`'s `datasource` block carries only `provider = "postgresql"`; `lib/prisma.ts` connects via a `@prisma/adapter-pg` driver adapter constructed from `DATABASE_URL` (pooled) at runtime. A `prisma.config.ts` (not yet created — deferred to whichever task first runs real migrations) will be needed for `prisma migrate`/introspection commands, mapping `DATABASE_URL` (pooled, runtime queries) vs. `DIRECT_DATABASE_URL` (direct, for migrations) the same way the old `url`/`directUrl` split did — verify prisma.config.ts's exact shape empirically against the installed version when that task is reached, don't assume from possibly-stale docs.
 - File storage is Vercel Blob only. Allowed asset file types: `glb`, `usdz`. Max upload size: 100MB (`MAX_UPLOAD_SIZE_BYTES` in `lib/upload-validation.ts`).
 - Admin-only routes (`/api/assets`, `/api/upload`'s token generation) are gated by a single bearer-token secret (`ADMIN_API_SECRET` env var) — an explicit temporary stub, not real auth. No admin dashboard UI is in scope for this plan.
 - `ApiKey` model exists in the schema but is not enforced anywhere in this plan (reserved for a future client-embed-auth feature).
@@ -1452,7 +1452,11 @@ each with a permanent public AR-viewer page and QR code.
      and required by `/api/assets` and `/api/upload`.
    - `NEXT_PUBLIC_SITE_URL` — your deployment's public origin, used to
      build the QR code target URL.
-2. Push the schema to your real database:
+2. Create `prisma.config.ts` (Prisma 7 moved connection URLs for Migrate
+   out of `schema.prisma` — verify the exact config shape against the
+   installed `prisma` version's own types before writing this, the same
+   way Task 2 verified the schema/client adaptation), then push the
+   schema to your real database:
    ```bash
    npx prisma migrate dev --name init
    ```
