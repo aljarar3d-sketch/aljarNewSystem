@@ -21,6 +21,14 @@ export async function authorizeAssetUpload(request: Request, clientPayload: stri
   return {
     allowedContentTypes: [CONTENT_TYPE_BY_FILE_TYPE[payload.fileType]],
     maximumSizeInBytes: MAX_UPLOAD_SIZE_BYTES,
+    // `@vercel/blob` defaults to `addRandomSuffix: false` + `allowOverwrite:
+    // false`, so two assets uploading files with the same name (e.g. the very
+    // common `model.glb`) would collide and the second upload would be
+    // rejected — leaving that Asset stranded at PROCESSING forever, since
+    // `onUploadCompleted` never fires for a rejected upload. Enforced here on
+    // the server so a client-side change can't bypass it. Only the pathname is
+    // affected; `blob.url` is what gets persisted and used downstream.
+    addRandomSuffix: true,
     tokenPayload: JSON.stringify(payload),
   };
 }

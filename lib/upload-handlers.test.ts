@@ -57,6 +57,7 @@ describe('authorizeAssetUpload', () => {
 
     expect(result.allowedContentTypes).toEqual(['model/gltf-binary']);
     expect(result.maximumSizeInBytes).toBe(100 * 1024 * 1024);
+    expect(result.addRandomSuffix).toBe(true);
     expect(JSON.parse(result.tokenPayload)).toEqual({ assetId: 'a1', fileType: 'glb' });
   });
 });
