@@ -18,6 +18,13 @@ export async function POST(request: Request) {
 
     return NextResponse.json(jsonResponse);
   } catch (error) {
-    return NextResponse.json({ error: (error as Error).message }, { status: 400 });
+    // The Blob client's `upload()` discards the response body on a non-OK
+    // response, so this log is the only place these errors are observable.
+    console.error('upload route failed', error);
+
+    const message = error instanceof Error ? error.message : 'Upload failed';
+    const status = message === 'Unauthorized' ? 401 : 400;
+
+    return NextResponse.json({ error: message }, { status });
   }
 }
