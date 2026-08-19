@@ -1,7 +1,6 @@
 'use client';
 
-import { createElement } from 'react';
-import '@google/model-viewer';
+import { createElement, useEffect } from 'react';
 
 export interface ArViewerProps {
   name: string;
@@ -11,6 +10,14 @@ export interface ArViewerProps {
 }
 
 export function ArViewer({ name, glbUrl, usdzUrl, posterUrl }: ArViewerProps) {
+  // `@google/model-viewer` registers a custom element at import time and has no
+  // SSR guard — a top-level import throws `ReferenceError: HTMLElement is not
+  // defined` when Next.js server-renders this client component. Loading it in
+  // an effect keeps it browser-only.
+  useEffect(() => {
+    void import('@google/model-viewer');
+  }, []);
+
   return createElement('model-viewer', {
     src: glbUrl,
     'ios-src': usdzUrl ?? undefined,
