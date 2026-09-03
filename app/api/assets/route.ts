@@ -9,6 +9,27 @@ interface CreateAssetBody {
   categoryId?: string;
 }
 
+export async function GET(request: Request) {
+  if (!isAuthorizedAdminRequest(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const { searchParams } = new URL(request.url);
+  const clientId = searchParams.get('clientId');
+  const categoryId = searchParams.get('categoryId');
+
+  if (!clientId) {
+    return NextResponse.json({ error: 'clientId is required' }, { status: 400 });
+  }
+
+  const assets = await prisma.asset.findMany({
+    where: { clientId, ...(categoryId ? { categoryId } : {}) },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  return NextResponse.json(assets);
+}
+
 export async function POST(request: Request) {
   if (!isAuthorizedAdminRequest(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

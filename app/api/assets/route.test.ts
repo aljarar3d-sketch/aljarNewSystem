@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@/lib/prisma', () => ({
   default: {
     client: { findUnique: vi.fn() },
-    asset: { create: vi.fn() },
+    asset: { create: vi.fn(), findMany: vi.fn() },
   },
 }));
 vi.mock('@/lib/admin-auth', () => ({
@@ -12,7 +12,7 @@ vi.mock('@/lib/admin-auth', () => ({
 
 import prisma from '@/lib/prisma';
 import { isAuthorizedAdminRequest } from '@/lib/admin-auth';
-import { POST } from './route';
+import { GET, POST } from './route';
 
 function makeRequest(body: unknown) {
   return new Request('http://localhost/api/assets', {
@@ -20,6 +20,10 @@ function makeRequest(body: unknown) {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
   });
+}
+
+function makeGetRequest(query: string) {
+  return new Request(`http://localhost/api/assets${query}`);
 }
 
 describe('POST /api/assets', () => {
@@ -67,5 +71,49 @@ describe('POST /api/assets', () => {
     });
     const json = await response.json();
     expect(json).toEqual({ id: 'a1', name: 'Chair', status: 'PROCESSING' });
+  });
+});
+
+describe('GET /api/assets', () => {
+  beforeEach(() => {
+    vi.mocked(isAuthorizedAdminRequest).mockReset();
+    vi.mocked(prisma.asset.findMany).mockReset();
+  });
+
+  it('returns 401 when the request is not authorized', async () => {
+    vi.mocked(isAuthorizedAdminRequest).mockReturnValue(false);
+    const response = await GET(makeGetRequest('?clientId=c1'));
+    expect(response.status).toBe(401);
+  });
+
+  it('returns 400 when clientId is missing', async () => {
+    vi.mocked(isAuthorizedAdminRequest).mockReturnValue(true);
+    const response = await GET(makeGetRequest(''));
+    expect(response.status).toBe(400);
+  });
+
+  it('lists assets for a client', async () => {
+    vi.mocked(isAuthorizedAdminRequest).mockReturnValue(true);
+    vi.mocked(prisma.asset.findMany).mockResolvedValue([{ id: 'a1', name: 'Chair' }] as never);
+
+    const response = await GET(makeGetRequest('?clientId=c1'));
+
+    expect(response.status).toBe(200);
+    expect(prisma.asset.findMany).toHaveBeenCalledWith({
+      where: { clientId: 'c1' },
+      orderBy: { createdAt: 'desc' },
+    });
+  });
+
+  it('filters by categoryId when provided', async () => {
+    vi.mocked(isAuthorizedAdminRequest).mockReturnValue(true);
+    vi.mocked(prisma.asset.findMany).mockResolvedValue([] as never);
+
+    await GET(makeGetRequest('?clientId=c1&categoryId=cat1'));
+
+    expect(prisma.asset.findMany).toHaveBeenCalledWith({
+      where: { clientId: 'c1', categoryId: 'cat1' },
+      orderBy: { createdAt: 'desc' },
+    });
   });
 });

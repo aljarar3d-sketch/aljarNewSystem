@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma';
 import { isAssetViewable } from '@/lib/asset-viewable';
 import { ArViewer } from '@/components/ArViewer';
 import { AssetQrCode } from '@/components/AssetQrCode';
+import { TopBar } from '@/components/TopBar';
 
 interface PageProps {
   params: Promise<{ assetId: string }>;
@@ -34,26 +35,31 @@ export default async function AssetArPage({ params }: PageProps) {
   const publicUrl = `${protocol}://${host}/ar/${asset!.id}`;
 
   return (
-    <main
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        padding: '2rem',
-        gap: '1.5rem',
-      }}
-    >
-      <h1>{asset!.name}</h1>
-      <ArViewer
-        name={asset!.name}
-        glbUrl={asset!.glbUrl!}
-        usdzUrl={asset!.usdzUrl}
-        posterUrl={asset!.posterUrl}
-      />
-      <section style={{ textAlign: 'center' }}>
-        <h2>Scan to view on your phone</h2>
-        <AssetQrCode url={publicUrl} />
-      </section>
-    </main>
+    <>
+      <TopBar crumb={asset!.id} />
+      <main className="viewport-grid flex flex-1 flex-col items-center gap-8 px-6 py-10">
+        <h1 className="font-display text-3xl font-medium tracking-tight text-paper">{asset!.name}</h1>
+
+        <div className="w-full max-w-2xl">
+          <ArViewer
+            name={asset!.name}
+            glbUrl={asset!.glbUrl!}
+            usdzUrl={asset!.usdzUrl}
+            posterUrl={asset!.posterUrl}
+            shadowIntensity={asset!.shadowIntensity}
+            shadowSoftness={asset!.shadowSoftness}
+            exposure={asset!.exposure}
+            toneMapping={asset!.toneMapping}
+            autoRotate={asset!.autoRotate}
+            skyboxImage={asset!.skyboxImage}
+          />
+        </div>
+
+        <section className="flex flex-col items-center gap-3 rounded-lg border border-line bg-panel p-6 text-center">
+          <h2 className="font-mono text-xs uppercase tracking-[0.2em] text-dim">Scan to view on your phone</h2>
+          <AssetQrCode url={publicUrl} />
+        </section>
+      </main>
+    </>
   );
 }

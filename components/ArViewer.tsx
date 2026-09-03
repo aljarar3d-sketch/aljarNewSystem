@@ -7,9 +7,26 @@ export interface ArViewerProps {
   glbUrl: string;
   usdzUrl?: string | null;
   posterUrl?: string | null;
+  shadowIntensity?: number;
+  shadowSoftness?: number;
+  exposure?: number;
+  toneMapping?: string;
+  autoRotate?: boolean;
+  skyboxImage?: string | null;
 }
 
-export function ArViewer({ name, glbUrl, usdzUrl, posterUrl }: ArViewerProps) {
+export function ArViewer({
+  name,
+  glbUrl,
+  usdzUrl,
+  posterUrl,
+  shadowIntensity = 1,
+  shadowSoftness = 1,
+  exposure = 1,
+  toneMapping = 'auto',
+  autoRotate = true,
+  skyboxImage,
+}: ArViewerProps) {
   // `@google/model-viewer` registers a custom element at import time and has no
   // SSR guard — a top-level import throws `ReferenceError: HTMLElement is not
   // defined` when Next.js server-renders this client component. Loading it in
@@ -26,9 +43,13 @@ export function ArViewer({ name, glbUrl, usdzUrl, posterUrl }: ArViewerProps) {
     ar: true,
     'ar-modes': 'webxr scene-viewer quick-look',
     'camera-controls': true,
-    'auto-rotate': true,
-    'shadow-intensity': '1',
-    style: { width: '100%', height: '480px', backgroundColor: '#f5f5f5' },
+    'auto-rotate': autoRotate,
+    'shadow-intensity': String(shadowIntensity),
+    'shadow-softness': String(shadowSoftness),
+    exposure: String(exposure),
+    'tone-mapping': toneMapping,
+    'skybox-image': skyboxImage ?? undefined,
+    style: { width: '100%', height: '520px', backgroundColor: '#14171c', borderRadius: '0.75rem' },
     'data-testid': 'ar-viewer',
   });
 }
