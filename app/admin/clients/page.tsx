@@ -1,21 +1,30 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
-import { TopBar } from '@/components/TopBar';
-
-interface Category {
-  id: string;
-  name: string;
-  slug: string;
-}
+import { useAdminSession } from '@/lib/admin-session';
 
 interface ClientRow {
   id: string;
   name: string;
   slug: string;
   contactEmail: string | null;
-  categories: Category[];
+  categories: { id: string }[];
   _count: { assets: number };
+}
+
+interface ApiKeyRow {
+  id: string;
+  label: string;
+  keyPrefix: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+}
+
+interface NewlyCreatedKey {
+  clientId: string;
+  key: string;
+  endpointUrl: string;
 }
 
 async function api(path: string, secret: string, init?: RequestInit) {
@@ -45,36 +54,26 @@ function slugify(value: string) {
 }
 
 export default function AdminClientsPage() {
-  const [adminSecret, setAdminSecret] = useState('');
+  const { secret: adminSecret } = useAdminSession();
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [expandedClientId, setExpandedClientId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
 
   const [newClientName, setNewClientName] = useState('');
-  const [newCategoryNameByClient, setNewCategoryNameByClient] = useState<Record<string, string>>({});
   const [editingClientId, setEditingClientId] = useState<string | null>(null);
   const [editingClientName, setEditingClientName] = useState('');
-  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
-  const [editingCategoryName, setEditingCategoryName] = useState('');
   const [confirmDeleteClientId, setConfirmDeleteClientId] = useState<string | null>(null);
+  const [apiKeysByClient, setApiKeysByClient] = useState<Record<string, ApiKeyRow[]>>({});
+  const [newKeyLabelByClient, setNewKeyLabelByClient] = useState<Record<string, string>>({});
+  const [newlyCreatedKey, setNewlyCreatedKey] = useState<NewlyCreatedKey | null>(null);
+  const [copied, setCopied] = useState<'key' | 'url' | null>(null);
 
   async function loadClients() {
-    if (!adminSecret) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await api('/api/clients', adminSecret);
-      setClients(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load clients');
-    } finally {
-      setLoading(false);
-    }
+    const data = await api('/api/clients', adminSecret);
+    setClients(data);
   }
 
   useEffect(() => {
-    if (!adminSecret) return;
     let cancelled = false;
 
     api('/api/clients', adminSecret)
@@ -130,270 +129,274 @@ export default function AdminClientsPage() {
     }
   }
 
-  async function handleCreateCategory(clientId: string, event: FormEvent<HTMLFormElement>) {
+  async function toggleClientExpanded(clientId: string) {
+    const willExpand = expandedClientId !== clientId;
+    setExpandedClientId(willExpand ? clientId : null);
+    setNewlyCreatedKey(null);
+
+    if (willExpand) {
+      try {
+        const keys = await api(`/api/clients/${clientId}/api-keys`, adminSecret);
+        setApiKeysByClient((prev) => ({ ...prev, [clientId]: keys }));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load API keys');
+      }
+    }
+  }
+
+  async function handleCreateApiKey(clientId: string, event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
-    const name = newCategoryNameByClient[clientId] ?? '';
+    const label = newKeyLabelByClient[clientId] ?? '';
     try {
-      await api('/api/categories', adminSecret, {
+      const created = await api(`/api/clients/${clientId}/api-keys`, adminSecret, {
         method: 'POST',
-        body: JSON.stringify({ clientId, name, slug: slugify(name) }),
+        body: JSON.stringify({ label }),
       });
-      setNewCategoryNameByClient((prev) => ({ ...prev, [clientId]: '' }));
-      await loadClients();
+      setNewKeyLabelByClient((prev) => ({ ...prev, [clientId]: '' }));
+      setNewlyCreatedKey({
+        clientId,
+        key: created.key,
+        endpointUrl: `${window.location.origin}/api/v1/assets`,
+      });
+      const keys = await api(`/api/clients/${clientId}/api-keys`, adminSecret);
+      setApiKeysByClient((prev) => ({ ...prev, [clientId]: keys }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create category');
+      setError(err instanceof Error ? err.message : 'Failed to create API key');
     }
   }
 
-  async function handleUpdateCategory(id: string) {
+  async function handleRevokeApiKey(clientId: string, keyId: string) {
     setError(null);
     try {
-      await api(`/api/categories/${id}`, adminSecret, {
+      await api(`/api/clients/${clientId}/api-keys/${keyId}`, adminSecret, {
         method: 'PATCH',
-        body: JSON.stringify({ name: editingCategoryName, slug: slugify(editingCategoryName) }),
+        body: JSON.stringify({ revoked: true }),
       });
-      setEditingCategoryId(null);
-      await loadClients();
+      const keys = await api(`/api/clients/${clientId}/api-keys`, adminSecret);
+      setApiKeysByClient((prev) => ({ ...prev, [clientId]: keys }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update category');
+      setError(err instanceof Error ? err.message : 'Failed to revoke API key');
     }
   }
 
-  async function handleDeleteCategory(id: string) {
-    setError(null);
+  async function copyToClipboard(text: string, which: 'key' | 'url') {
     try {
-      await api(`/api/categories/${id}`, adminSecret, { method: 'DELETE' });
-      await loadClients();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete category');
+      await navigator.clipboard.writeText(text);
+      setCopied(which);
+      setTimeout(() => setCopied(null), 1500);
+    } catch {
+      // Clipboard access can be denied by the browser; the value is still selectable/visible.
     }
   }
 
   return (
-    <>
-      <TopBar crumb="admin / clients" />
-      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-6 py-8">
-        <div>
-          <h1 className="font-display text-2xl font-medium tracking-tight text-paper">Clients &amp; categories</h1>
-          <p className="mt-1 text-sm text-dim">
-            Deleting a client removes all of its categories, assets, uploaded files, and API keys.
-          </p>
-        </div>
+    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-8 py-8">
+      <div>
+        <h1 className="font-display text-2xl font-medium tracking-tight text-paper">Clients</h1>
+        <p className="mt-1 text-sm text-dim">
+          Deleting a client removes all of its categories, assets, uploaded files, and API keys.
+        </p>
+      </div>
 
-        <label className="flex flex-col gap-1.5 text-sm">
-          <span className="text-dim">Admin secret</span>
-          <input
-            type="password"
-            value={adminSecret}
-            onChange={(event) => setAdminSecret(event.target.value)}
-            className="rounded-md border border-line bg-panel px-3 py-2 text-paper outline-none transition focus:border-scan"
-          />
-        </label>
+      {error && (
+        <p className="rounded-md border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger">{error}</p>
+      )}
 
-        {error && (
-          <p className="rounded-md border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger">{error}</p>
-        )}
+      <form onSubmit={handleCreateClient} className="flex gap-2">
+        <input
+          type="text"
+          placeholder="New client name"
+          value={newClientName}
+          onChange={(event) => setNewClientName(event.target.value)}
+          required
+          className="flex-1 rounded-md border border-line bg-panel px-3 py-2 text-sm text-paper outline-none transition placeholder:text-dim/60 focus:border-scan"
+        />
+        <button
+          type="submit"
+          className="rounded-md bg-scan px-4 py-2 text-sm font-medium text-ink transition hover:opacity-90"
+        >
+          Add client
+        </button>
+      </form>
 
-        {adminSecret && (
-          <>
-            <form onSubmit={handleCreateClient} className="flex gap-2">
-              <input
-                type="text"
-                placeholder="New client name"
-                value={newClientName}
-                onChange={(event) => setNewClientName(event.target.value)}
-                required
-                className="flex-1 rounded-md border border-line bg-panel px-3 py-2 text-sm text-paper outline-none transition placeholder:text-dim/60 focus:border-scan"
-              />
-              <button
-                type="submit"
-                className="rounded-md bg-scan px-4 py-2 text-sm font-medium text-ink transition hover:opacity-90"
-              >
-                Add client
-              </button>
-            </form>
+      <ul className="flex flex-col gap-3">
+        {clients.map((client) => {
+          const isExpanded = expandedClientId === client.id;
+          return (
+            <li key={client.id} className="rounded-lg border border-line bg-panel">
+              <div className="flex items-center justify-between gap-2 px-4 py-3">
+                <button
+                  type="button"
+                  onClick={() => toggleClientExpanded(client.id)}
+                  className="flex flex-1 items-center gap-2 text-left"
+                >
+                  <span className="text-dim">{isExpanded ? '▾' : '▸'}</span>
+                  {editingClientId === client.id ? (
+                    <input
+                      type="text"
+                      value={editingClientName}
+                      onChange={(event) => setEditingClientName(event.target.value)}
+                      onClick={(event) => event.stopPropagation()}
+                      className="rounded-sm border border-line bg-panel-raised px-2 py-1 text-sm text-paper outline-none focus:border-scan"
+                    />
+                  ) : (
+                    <span className="font-medium text-paper">{client.name}</span>
+                  )}
+                  <span className="text-xs text-dim">
+                    {client.categories.length} categories · {client._count.assets} assets
+                  </span>
+                </button>
 
-            {loading && <p className="text-sm text-dim">Loading…</p>}
-
-            <ul className="flex flex-col gap-3">
-              {clients.map((client) => {
-                const isExpanded = expandedClientId === client.id;
-                return (
-                  <li key={client.id} className="rounded-lg border border-line bg-panel">
-                    <div className="flex items-center justify-between gap-2 px-4 py-3">
+                {editingClientId === client.id ? (
+                  <div className="flex gap-2 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateClient(client.id)}
+                      className="text-ready hover:underline"
+                    >
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingClientId(null)}
+                      className="text-dim hover:underline"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingClientId(client.id);
+                        setEditingClientName(client.name);
+                      }}
+                      className="text-dim hover:text-paper hover:underline"
+                    >
+                      Edit
+                    </button>
+                    {confirmDeleteClientId === client.id ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteClient(client.id)}
+                          className="text-danger hover:underline"
+                        >
+                          Confirm delete
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteClientId(null)}
+                          className="text-dim hover:underline"
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    ) : (
                       <button
                         type="button"
-                        onClick={() => setExpandedClientId(isExpanded ? null : client.id)}
-                        className="flex flex-1 items-center gap-2 text-left"
+                        onClick={() => setConfirmDeleteClientId(client.id)}
+                        className="text-dim hover:text-danger hover:underline"
                       >
-                        <span className="text-dim">{isExpanded ? '▾' : '▸'}</span>
-                        {editingClientId === client.id ? (
-                          <input
-                            type="text"
-                            value={editingClientName}
-                            onChange={(event) => setEditingClientName(event.target.value)}
-                            onClick={(event) => event.stopPropagation()}
-                            className="rounded-sm border border-line bg-panel-raised px-2 py-1 text-sm text-paper outline-none focus:border-scan"
-                          />
-                        ) : (
-                          <span className="font-medium text-paper">{client.name}</span>
-                        )}
-                        <span className="text-xs text-dim">
-                          {client.categories.length} categories · {client._count.assets} assets
-                        </span>
+                        Delete
                       </button>
-
-                      {editingClientId === client.id ? (
-                        <div className="flex gap-2 text-xs">
-                          <button
-                            type="button"
-                            onClick={() => handleUpdateClient(client.id)}
-                            className="text-ready hover:underline"
-                          >
-                            Save
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setEditingClientId(null)}
-                            className="text-dim hover:underline"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex gap-2 text-xs">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingClientId(client.id);
-                              setEditingClientName(client.name);
-                            }}
-                            className="text-dim hover:text-paper hover:underline"
-                          >
-                            Edit
-                          </button>
-                          {confirmDeleteClientId === client.id ? (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteClient(client.id)}
-                                className="text-danger hover:underline"
-                              >
-                                Confirm delete
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setConfirmDeleteClientId(null)}
-                                className="text-dim hover:underline"
-                              >
-                                Cancel
-                              </button>
-                            </>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => setConfirmDeleteClientId(client.id)}
-                              className="text-dim hover:text-danger hover:underline"
-                            >
-                              Delete
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {isExpanded && (
-                      <div className="border-t border-line px-4 py-3">
-                        <ul className="flex flex-col gap-2">
-                          {client.categories.map((category) => (
-                            <li
-                              key={category.id}
-                              className="flex items-center justify-between gap-2 rounded-md bg-panel-raised px-3 py-2 text-sm"
-                            >
-                              {editingCategoryId === category.id ? (
-                                <input
-                                  type="text"
-                                  value={editingCategoryName}
-                                  onChange={(event) => setEditingCategoryName(event.target.value)}
-                                  className="flex-1 rounded-sm border border-line bg-panel px-2 py-1 text-sm text-paper outline-none focus:border-scan"
-                                />
-                              ) : (
-                                <span className="text-paper">{category.name}</span>
-                              )}
-
-                              {editingCategoryId === category.id ? (
-                                <div className="flex gap-2 text-xs">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleUpdateCategory(category.id)}
-                                    className="text-ready hover:underline"
-                                  >
-                                    Save
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setEditingCategoryId(null)}
-                                    className="text-dim hover:underline"
-                                  >
-                                    Cancel
-                                  </button>
-                                </div>
-                              ) : (
-                                <div className="flex gap-2 text-xs">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setEditingCategoryId(category.id);
-                                      setEditingCategoryName(category.name);
-                                    }}
-                                    className="text-dim hover:text-paper hover:underline"
-                                  >
-                                    Edit
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteCategory(category.id)}
-                                    className="text-dim hover:text-danger hover:underline"
-                                  >
-                                    Delete
-                                  </button>
-                                </div>
-                              )}
-                            </li>
-                          ))}
-                        </ul>
-
-                        <form
-                          onSubmit={(event) => handleCreateCategory(client.id, event)}
-                          className="mt-3 flex gap-2"
-                        >
-                          <input
-                            type="text"
-                            placeholder="New category name"
-                            value={newCategoryNameByClient[client.id] ?? ''}
-                            onChange={(event) =>
-                              setNewCategoryNameByClient((prev) => ({ ...prev, [client.id]: event.target.value }))
-                            }
-                            required
-                            className="flex-1 rounded-md border border-line bg-panel px-3 py-1.5 text-sm text-paper outline-none transition placeholder:text-dim/60 focus:border-scan"
-                          />
-                          <button
-                            type="submit"
-                            className="rounded-md bg-panel-raised px-3 py-1.5 text-sm text-paper transition hover:bg-line"
-                          >
-                            Add category
-                          </button>
-                        </form>
-                      </div>
                     )}
-                  </li>
-                );
-              })}
-            </ul>
-          </>
-        )}
-      </main>
-    </>
+                  </div>
+                )}
+              </div>
+
+              {isExpanded && (
+                <div className="border-t border-line px-4 py-3">
+                  <h3 className="text-xs font-medium uppercase tracking-wide text-dim">API access</h3>
+                  <p className="mt-1 text-xs text-dim">
+                    Give a developer the endpoint URL and a key below — the key alone determines which
+                    client&apos;s assets they can fetch.
+                  </p>
+
+                  {newlyCreatedKey && newlyCreatedKey.clientId === client.id && (
+                    <div className="mt-3 flex flex-col gap-2 rounded-md border border-scan/50 bg-panel-raised p-3 text-xs">
+                      <p className="text-ready">Key created — copy it now, it won&apos;t be shown again.</p>
+                      <div className="flex items-center gap-2">
+                        <code className="flex-1 overflow-x-auto whitespace-nowrap text-paper">
+                          {newlyCreatedKey.key}
+                        </code>
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(newlyCreatedKey.key, 'key')}
+                          className="shrink-0 rounded-sm bg-panel px-2 py-1 text-dim transition hover:text-paper"
+                        >
+                          {copied === 'key' ? 'Copied ✓' : 'Copy key'}
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <code className="flex-1 overflow-x-auto whitespace-nowrap text-paper">
+                          {newlyCreatedKey.endpointUrl}
+                        </code>
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(newlyCreatedKey.endpointUrl, 'url')}
+                          className="shrink-0 rounded-sm bg-panel px-2 py-1 text-dim transition hover:text-paper"
+                        >
+                          {copied === 'url' ? 'Copied ✓' : 'Copy URL'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <ul className="mt-3 flex flex-col gap-1.5">
+                    {(apiKeysByClient[client.id] ?? []).map((key) => (
+                      <li
+                        key={key.id}
+                        className="flex items-center justify-between gap-2 rounded-md bg-panel-raised px-3 py-2 text-xs"
+                      >
+                        <div className="flex flex-col">
+                          <span className="text-paper">{key.label}</span>
+                          <span className="font-mono text-dim">{key.keyPrefix}…</span>
+                        </div>
+                        {key.revokedAt ? (
+                          <span className="text-danger">Revoked</span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleRevokeApiKey(client.id, key.id)}
+                            className="text-dim hover:text-danger hover:underline"
+                          >
+                            Revoke
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                    {(apiKeysByClient[client.id] ?? []).length === 0 && (
+                      <li className="text-xs text-dim">No API keys yet.</li>
+                    )}
+                  </ul>
+
+                  <form onSubmit={(event) => handleCreateApiKey(client.id, event)} className="mt-3 flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Key label, e.g. Acme dev team"
+                      value={newKeyLabelByClient[client.id] ?? ''}
+                      onChange={(event) =>
+                        setNewKeyLabelByClient((prev) => ({ ...prev, [client.id]: event.target.value }))
+                      }
+                      required
+                      className="flex-1 rounded-md border border-line bg-panel px-3 py-1.5 text-sm text-paper outline-none transition placeholder:text-dim/60 focus:border-scan"
+                    />
+                    <button
+                      type="submit"
+                      className="rounded-md bg-panel-raised px-3 py-1.5 text-sm text-paper transition hover:bg-line"
+                    >
+                      Create key
+                    </button>
+                  </form>
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </main>
   );
 }

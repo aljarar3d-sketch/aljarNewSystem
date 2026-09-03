@@ -58,20 +58,12 @@ each with a permanent public AR-viewer page and QR code.
 > set `VERCEL_BLOB_CALLBACK_URL` to that tunnel's **origin only** — the
 > SDK appends the `/api/upload` path itself.
 
-1. Seed a client directly (no admin UI yet):
-   ```bash
-   npx tsx scripts/create-test-asset.ts
-   ```
-   This creates a `Client` and an `Asset` row and prints the new
+1. Visit `/admin/clients` and create a client (and optionally a
+   category) — or seed one non-interactively with
+   `npx tsx scripts/create-test-asset.ts`, which prints the new
    `assetId`.
-
-   To create further assets against an existing client, call the API
-   directly (see "Creating an asset via the API" below).
-2. Upload a real `.glb` file for that asset using `uploadAssetFile`
-   from `lib/upload-client.ts` (wire it up to a temporary `<input type="file">`
-   page) — there is no admin UI yet, so this step is code, not clicking.
-   `uploadAssetFile` needs the `assetId` from step 1, `fileType: 'glb'`,
-   the `File`, and `ADMIN_API_SECRET`.
+2. Visit `/admin/upload`, enter the admin secret, pick the client, and
+   upload a real `.glb` file.
 3. Visit `/ar/<assetId>` and confirm the model renders and the QR code
    resolves back to the same page from a phone.
 
@@ -123,6 +115,44 @@ The new asset starts at `status: "PROCESSING"`; it flips to `"READY"`
 once a `.glb` upload completes. Take the returned `id` into the
 `uploadAssetFile` step above.
 
+## Fetching a client's assets via the public API
+
+`GET /api/v1/assets` is what a developer given an API key (created from
+`/admin/clients`) uses to fetch their client's assets — no `clientId`
+needed, the key alone determines the client:
+
+```bash
+curl https://<your-deployment>/api/v1/assets \
+  -H "Authorization: Bearer ar_live_..."
+```
+
+Optional `?categoryId=<id>` filters to one category. Response is a JSON
+array of that client's `READY` assets:
+
+```json
+[
+  {
+    "id": "clx2222222222222222222222",
+    "name": "Dining Chair",
+    "description": "Oak dining chair, 2026 line",
+    "glbUrl": "https://.../chair.glb",
+    "usdzUrl": null,
+    "posterUrl": null,
+    "categoryId": "clx1111111111111111111111",
+    "shadowIntensity": 1,
+    "shadowSoftness": 1,
+    "exposure": 1,
+    "toneMapping": "auto",
+    "autoRotate": true,
+    "skyboxImage": null
+  }
+]
+```
+
+`401` for a missing, unknown, or revoked key. CORS is open
+(`Access-Control-Allow-Origin: *`) since this is meant to be called
+from a developer's own app or server.
+
 ## Known limitations (by design, see the design spec)
 
 - Admin routes are gated by a single shared secret (`ADMIN_API_SECRET`),
@@ -135,9 +165,17 @@ once a `.glb` upload completes. Take the returned `id` into the
   env var or a hardcoded constant, both of which are inlined into
   JavaScript served to every visitor and would leak full admin write
   access.
-- `ApiKey` records can be created in the schema but aren't enforced
-  anywhere yet — reserved for future client-embed auth.
-- There is no admin dashboard UI. Asset creation is via `POST /api/assets`
-  directly.
+- `ApiKey`-authenticated access is read-only and scoped to one client's
+  `READY` assets (`GET /api/v1/assets`, `Authorization: Bearer <key>`).
+  Keys are created/revoked from `/admin/clients`; the plaintext key is
+  shown once at creation and never stored (only its SHA-256 hash is).
+- `/admin/*` is a single sidebar-shell app: sign in once with the admin
+  secret (remembered for the browser session via `sessionStorage`, see
+  `lib/admin-session.ts`) and every admin page uses it — `/admin`
+  (overview/stats), `/admin/clients` (manage clients + API keys),
+  `/admin/categories` (manage a client's categories),
+  `/admin/upload` (create + upload an asset), and `/admin/assets`
+  (tune an asset's AR viewer settings). Direct API calls (e.g.
+  `POST /api/assets`) are still available for scripting.
 
 Full design rationale: `docs/superpowers/specs/2026-08-19-ar-asset-platform-design.md`.

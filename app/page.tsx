@@ -16,26 +16,12 @@ export default function Home() {
             reality on their phone — scan the QR code, see it in the room.
           </p>
         </div>
-        <div className="reveal flex gap-3">
-          <Link
-            href="/admin/upload"
-            className="rounded-full bg-scan px-6 py-3 font-medium text-ink transition hover:opacity-90"
-          >
-            Upload an asset
-          </Link>
-          <Link
-            href="/admin/clients"
-            className="rounded-full border border-line px-6 py-3 font-medium text-paper transition hover:border-scan"
-          >
-            Manage clients
-          </Link>
-          <Link
-            href="/assets"
-            className="rounded-full border border-line px-6 py-3 font-medium text-paper transition hover:border-scan"
-          >
-            Tune assets
-          </Link>
-        </div>
+        <Link
+          href="/admin"
+          className="reveal rounded-full bg-scan px-6 py-3 font-medium text-ink transition hover:opacity-90"
+        >
+          Open admin
+        </Link>
       </main>
     </>
   );
