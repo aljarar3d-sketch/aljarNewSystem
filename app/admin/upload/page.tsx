@@ -1,10 +1,15 @@
 'use client';
 
-import { useState, type FormEvent, type InputHTMLAttributes } from 'react';
+import { useEffect, useState, type FormEvent, type InputHTMLAttributes } from 'react';
 import { AssetQrCode } from '@/components/AssetQrCode';
 import { ClientPicker } from '@/components/ClientPicker';
 import { uploadAssetFile } from '@/lib/upload-client';
 import { useAdminSession } from '@/lib/admin-session';
+
+interface Category {
+  id: string;
+  name: string;
+}
 
 type StepStatus = 'pending' | 'active' | 'done' | 'error';
 
@@ -36,6 +41,8 @@ function Field({ label, ...props }: { label: string } & InputHTMLAttributes<HTML
 export default function AdminUploadPage() {
   const { secret: adminSecret } = useAdminSession();
   const [clientId, setClientId] = useState('');
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [categoryId, setCategoryId] = useState('');
   const [assetName, setAssetName] = useState('');
   const [glbFile, setGlbFile] = useState<File | null>(null);
   const [usdzFile, setUsdzFile] = useState<File | null>(null);
@@ -45,6 +52,32 @@ export default function AdminUploadPage() {
   const [resultAssetId, setResultAssetId] = useState<string | null>(null);
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!clientId) return;
+    let cancelled = false;
+
+    fetch('/api/clients', { headers: { Authorization: `Bearer ${adminSecret}` } })
+      .then((response) => (response.ok ? response.json() : []))
+      .then((clients: { id: string; categories: Category[] }[]) => {
+        if (cancelled) return;
+        const client = clients.find((entry) => entry.id === clientId);
+        setCategories(client?.categories ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setCategories([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [clientId, adminSecret]);
+
+  function handleClientChange(id: string) {
+    setClientId(id);
+    setCategoryId('');
+    setCategories([]);
+  }
 
   // React state updates are async, so a `steps`/`activeLabel` read inside
   // this function would see stale values from when handleSubmit was called,
@@ -87,7 +120,7 @@ export default function AdminUploadPage() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${adminSecret}`,
         },
-        body: JSON.stringify({ clientId, name: assetName }),
+        body: JSON.stringify({ clientId, name: assetName, categoryId: categoryId || undefined }),
       });
 
       if (!createResponse.ok) {
@@ -133,7 +166,24 @@ export default function AdminUploadPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <ClientPicker adminSecret={adminSecret} value={clientId} onChange={setClientId} />
+          <ClientPicker adminSecret={adminSecret} value={clientId} onChange={handleClientChange} />
+          {clientId && (
+            <label className="flex flex-col gap-1.5 text-sm">
+              <span className="text-dim">Category (optional)</span>
+              <select
+                value={categoryId}
+                onChange={(event) => setCategoryId(event.target.value)}
+                className="rounded-md border border-line bg-panel px-3 py-2 text-paper outline-none transition focus:border-scan"
+              >
+                <option value="">Uncategorized</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <Field
             label="Asset name"
             type="text"

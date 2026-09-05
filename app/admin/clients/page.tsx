@@ -24,7 +24,6 @@ interface ApiKeyRow {
 interface NewlyCreatedKey {
   clientId: string;
   key: string;
-  endpointUrl: string;
 }
 
 async function api(path: string, secret: string, init?: RequestInit) {
@@ -154,11 +153,7 @@ export default function AdminClientsPage() {
         body: JSON.stringify({ label }),
       });
       setNewKeyLabelByClient((prev) => ({ ...prev, [clientId]: '' }));
-      setNewlyCreatedKey({
-        clientId,
-        key: created.key,
-        endpointUrl: `${window.location.origin}/api/v1/assets`,
-      });
+      setNewlyCreatedKey({ clientId, key: created.key });
       const keys = await api(`/api/clients/${clientId}/api-keys`, adminSecret);
       setApiKeysByClient((prev) => ({ ...prev, [clientId]: keys }));
     } catch (err) {
@@ -315,9 +310,25 @@ export default function AdminClientsPage() {
                     client&apos;s assets they can fetch.
                   </p>
 
+                  <div className="mt-3 flex items-center gap-2 rounded-md border border-line bg-panel-raised p-2 text-xs">
+                    <code className="flex-1 overflow-x-auto whitespace-nowrap text-paper">
+                      {`${typeof window === 'undefined' ? '' : window.location.origin}/api/v1/assets`}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(`${window.location.origin}/api/v1/assets`, 'url')}
+                      className="shrink-0 rounded-sm bg-panel px-2 py-1 text-dim transition hover:text-paper"
+                    >
+                      {copied === 'url' ? 'Copied ✓' : 'Copy URL'}
+                    </button>
+                  </div>
+
                   {newlyCreatedKey && newlyCreatedKey.clientId === client.id && (
                     <div className="mt-3 flex flex-col gap-2 rounded-md border border-scan/50 bg-panel-raised p-3 text-xs">
-                      <p className="text-ready">Key created — copy it now, it won&apos;t be shown again.</p>
+                      <p className="text-ready">
+                        Key created — copy it now. It can&apos;t be shown again (only its hash is stored); if it&apos;s
+                        lost, revoke it and create a new one.
+                      </p>
                       <div className="flex items-center gap-2">
                         <code className="flex-1 overflow-x-auto whitespace-nowrap text-paper">
                           {newlyCreatedKey.key}
@@ -328,18 +339,6 @@ export default function AdminClientsPage() {
                           className="shrink-0 rounded-sm bg-panel px-2 py-1 text-dim transition hover:text-paper"
                         >
                           {copied === 'key' ? 'Copied ✓' : 'Copy key'}
-                        </button>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <code className="flex-1 overflow-x-auto whitespace-nowrap text-paper">
-                          {newlyCreatedKey.endpointUrl}
-                        </code>
-                        <button
-                          type="button"
-                          onClick={() => copyToClipboard(newlyCreatedKey.endpointUrl, 'url')}
-                          className="shrink-0 rounded-sm bg-panel px-2 py-1 text-dim transition hover:text-paper"
-                        >
-                          {copied === 'url' ? 'Copied ✓' : 'Copy URL'}
                         </button>
                       </div>
                     </div>
