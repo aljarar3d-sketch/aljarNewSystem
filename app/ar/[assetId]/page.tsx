@@ -52,6 +52,7 @@ export default async function AssetArPage({ params }: PageProps) {
             toneMapping={asset!.toneMapping}
             autoRotate={asset!.autoRotate}
             skyboxImage={asset!.skyboxImage}
+            autoLaunchAr
           />
         </div>
 
