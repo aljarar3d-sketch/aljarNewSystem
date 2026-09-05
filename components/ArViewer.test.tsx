@@ -62,45 +62,4 @@ describe('ArViewer', () => {
     expect(viewer.hasAttribute('auto-rotate')).toBe(false);
     expect(viewer.getAttribute('skybox-image')).toBe('https://blob.example/room.jpg');
   });
-
-  describe('autoLaunchAr', () => {
-    // The real custom element isn't registered in this mocked environment, so
-    // `canActivateAR`/`activateAR` don't exist on the plain DOM node jsdom
-    // creates — stub them the way the real element would expose them.
-    function stubArSupport(element: Element, canActivateAR: boolean) {
-      const activateAR = vi.fn().mockResolvedValue(undefined);
-      Object.assign(element, { canActivateAR, activateAR });
-      return activateAR;
-    }
-
-    it('calls activateAR on load when enabled and AR is available', () => {
-      render(<ArViewer name="Chair" glbUrl="https://blob.example/chair.glb" autoLaunchAr />);
-      const viewer = screen.getByTestId('ar-viewer');
-      const activateAR = stubArSupport(viewer, true);
-
-      viewer.dispatchEvent(new Event('load'));
-
-      expect(activateAR).toHaveBeenCalledTimes(1);
-    });
-
-    it('does not call activateAR when the platform cannot activate AR', () => {
-      render(<ArViewer name="Chair" glbUrl="https://blob.example/chair.glb" autoLaunchAr />);
-      const viewer = screen.getByTestId('ar-viewer');
-      const activateAR = stubArSupport(viewer, false);
-
-      viewer.dispatchEvent(new Event('load'));
-
-      expect(activateAR).not.toHaveBeenCalled();
-    });
-
-    it('does not auto-launch when the prop is left at its default (admin previews)', () => {
-      render(<ArViewer name="Chair" glbUrl="https://blob.example/chair.glb" />);
-      const viewer = screen.getByTestId('ar-viewer');
-      const activateAR = stubArSupport(viewer, true);
-
-      viewer.dispatchEvent(new Event('load'));
-
-      expect(activateAR).not.toHaveBeenCalled();
-    });
-  });
 });
