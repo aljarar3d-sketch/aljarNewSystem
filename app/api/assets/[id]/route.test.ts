@@ -2,22 +2,26 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/prisma', () => ({
   default: {
-    asset: { update: vi.fn() },
+    asset: { update: vi.fn(), findUnique: vi.fn(), delete: vi.fn() },
   },
 }));
 vi.mock('@/lib/admin-auth', () => ({
   isAuthorizedAdminRequest: vi.fn(),
 }));
+vi.mock('@/lib/asset-files', () => ({
+  deleteAssetFiles: vi.fn().mockResolvedValue(undefined),
+}));
 
 import prisma from '@/lib/prisma';
 import { isAuthorizedAdminRequest } from '@/lib/admin-auth';
-import { PATCH } from './route';
+import { deleteAssetFiles } from '@/lib/asset-files';
+import { DELETE, PATCH } from './route';
 
-function makeRequest(body: unknown) {
+function makeRequest(body: unknown, method = 'PATCH') {
   return new Request('http://localhost/api/assets/a1', {
-    method: 'PATCH',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
+    method,
+    headers: body ? { 'content-type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
   });
 }
 
@@ -73,5 +77,49 @@ describe('PATCH /api/assets/[id]', () => {
       where: { id: 'a1' },
       data: { skyboxImage: null },
     });
+  });
+});
+
+describe('DELETE /api/assets/[id]', () => {
+  beforeEach(() => {
+    vi.mocked(isAuthorizedAdminRequest).mockReset();
+    vi.mocked(prisma.asset.findUnique).mockReset();
+    vi.mocked(prisma.asset.delete).mockReset();
+    vi.mocked(deleteAssetFiles).mockClear();
+  });
+
+  it('returns 401 when unauthorized', async () => {
+    vi.mocked(isAuthorizedAdminRequest).mockReturnValue(false);
+    const response = await DELETE(makeRequest(undefined, 'DELETE'), makeParams('a1'));
+    expect(response.status).toBe(401);
+  });
+
+  it('returns 404 when the asset does not exist', async () => {
+    vi.mocked(isAuthorizedAdminRequest).mockReturnValue(true);
+    vi.mocked(prisma.asset.findUnique).mockResolvedValue(null);
+    const response = await DELETE(makeRequest(undefined, 'DELETE'), makeParams('missing'));
+    expect(response.status).toBe(404);
+  });
+
+  it('deletes the asset files then the asset row', async () => {
+    vi.mocked(isAuthorizedAdminRequest).mockReturnValue(true);
+    vi.mocked(prisma.asset.findUnique).mockResolvedValue({
+      id: 'a1',
+      glbUrl: '/uploads/a1/model.glb',
+      usdzUrl: null,
+      posterUrl: null,
+    } as never);
+    vi.mocked(prisma.asset.delete).mockResolvedValue({ id: 'a1' } as never);
+
+    const response = await DELETE(makeRequest(undefined, 'DELETE'), makeParams('a1'));
+
+    expect(deleteAssetFiles).toHaveBeenCalledWith({
+      id: 'a1',
+      glbUrl: '/uploads/a1/model.glb',
+      usdzUrl: null,
+      posterUrl: null,
+    });
+    expect(prisma.asset.delete).toHaveBeenCalledWith({ where: { id: 'a1' } });
+    expect(response.status).toBe(204);
   });
 });

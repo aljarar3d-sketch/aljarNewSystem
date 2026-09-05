@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { isAuthorizedAdminRequest } from '@/lib/admin-auth';
+import { deleteAssetFiles } from '@/lib/asset-files';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -52,4 +53,26 @@ export async function PATCH(request: Request, { params }: RouteContext) {
   const asset = await prisma.asset.update({ where: { id }, data });
 
   return NextResponse.json(asset);
+}
+
+export async function DELETE(request: Request, { params }: RouteContext) {
+  if (!isAuthorizedAdminRequest(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const { id } = await params;
+
+  const asset = await prisma.asset.findUnique({
+    where: { id },
+    select: { id: true, glbUrl: true, usdzUrl: true, posterUrl: true },
+  });
+
+  if (!asset) {
+    return NextResponse.json({ error: 'Asset not found' }, { status: 404 });
+  }
+
+  await deleteAssetFiles(asset);
+  await prisma.asset.delete({ where: { id } });
+
+  return new NextResponse(null, { status: 204 });
 }

@@ -94,6 +94,8 @@ export default function AdminAssetsPage() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [confirmDeleteAssetId, setConfirmDeleteAssetId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const selectedAsset = assets.find((asset) => asset.id === selectedAssetId) ?? null;
 
@@ -143,6 +145,24 @@ export default function AdminAssetsPage() {
       skyboxImage: asset.skyboxImage,
     });
     setSaved(false);
+  }
+
+  async function handleDeleteAsset(assetId: string) {
+    setDeleting(true);
+    setError(null);
+    try {
+      await api(`/api/assets/${assetId}`, adminSecret, { method: 'DELETE' });
+      setAssets((prev) => prev.filter((asset) => asset.id !== assetId));
+      setConfirmDeleteAssetId(null);
+      if (selectedAssetId === assetId) {
+        setSelectedAssetId('');
+        setSettings(null);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete asset');
+    } finally {
+      setDeleting(false);
+    }
   }
 
   async function handleSave() {
@@ -196,19 +216,50 @@ export default function AdminAssetsPage() {
           <ul className="flex flex-col gap-1.5">
             {assets.length === 0 && <li className="text-sm text-dim">No assets found.</li>}
             {assets.map((asset) => (
-              <li key={asset.id}>
+              <li
+                key={asset.id}
+                className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition ${
+                  asset.id === selectedAssetId
+                    ? 'border-scan bg-panel-raised text-paper'
+                    : 'border-line bg-panel text-paper'
+                }`}
+              >
                 <button
                   type="button"
                   onClick={() => handleSelectAsset(asset)}
-                  className={`flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm transition ${
-                    asset.id === selectedAssetId
-                      ? 'border-scan bg-panel-raised text-paper'
-                      : 'border-line bg-panel text-paper hover:border-scan/50'
-                  }`}
+                  className="flex flex-1 items-center justify-between text-left hover:text-scan"
                 >
                   <span>{asset.name}</span>
                   <span className="text-xs text-dim">{asset.status}</span>
                 </button>
+
+                {confirmDeleteAssetId === asset.id ? (
+                  <div className="flex shrink-0 gap-2 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteAsset(asset.id)}
+                      disabled={deleting}
+                      className="text-danger hover:underline disabled:opacity-50"
+                    >
+                      Confirm
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDeleteAssetId(null)}
+                      className="text-dim hover:underline"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDeleteAssetId(asset.id)}
+                    className="shrink-0 text-xs text-dim hover:text-danger hover:underline"
+                  >
+                    Delete
+                  </button>
+                )}
               </li>
             ))}
           </ul>
