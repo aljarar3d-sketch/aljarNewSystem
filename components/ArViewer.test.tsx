@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 vi.mock('@google/model-viewer', () => ({}));
 
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ArViewer } from './ArViewer';
 
@@ -61,5 +61,25 @@ describe('ArViewer', () => {
     expect(viewer.getAttribute('tone-mapping')).toBe('neutral');
     expect(viewer.hasAttribute('auto-rotate')).toBe(false);
     expect(viewer.getAttribute('skybox-image')).toBe('https://blob.example/room.jpg');
+  });
+
+  describe('arButtonLabel', () => {
+    it('renders no button when omitted', () => {
+      render(<ArViewer name="Chair" glbUrl="https://blob.example/chair.glb" />);
+      expect(screen.queryByRole('button')).toBeNull();
+    });
+
+    it('renders a button with the given label that calls activateAR on click', () => {
+      render(<ArViewer name="Chair" glbUrl="https://blob.example/chair.glb" arButtonLabel="View in your space" />);
+
+      const viewer = screen.getByTestId('ar-viewer');
+      const activateAR = vi.fn().mockResolvedValue(undefined);
+      Object.assign(viewer, { activateAR });
+
+      const button = screen.getByRole('button', { name: 'View in your space' });
+      fireEvent.click(button);
+
+      expect(activateAR).toHaveBeenCalledTimes(1);
+    });
   });
 });

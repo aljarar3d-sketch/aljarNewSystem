@@ -15,7 +15,7 @@ import prisma from '@/lib/prisma';
 import { GET } from './route';
 
 function makeRequest(headers?: Record<string, string>, query = '') {
-  return new Request(`http://localhost/api/v1/assets${query}`, { headers });
+  return new Request(`http://localhost/api/v1/assets${query}`, { headers: { host: 'localhost', ...headers } });
 }
 
 describe('GET /api/v1/assets', () => {
@@ -85,7 +85,13 @@ describe('GET /api/v1/assets', () => {
     });
     const json = await response.json();
     expect(json).toEqual([
-      expect.objectContaining({ id: 'a1', name: 'Chair', glbUrl: 'https://blob/chair.glb' }),
+      expect.objectContaining({
+        id: 'a1',
+        name: 'Chair',
+        glbUrl: 'https://blob/chair.glb',
+        arUrl: 'https://localhost/ar/a1',
+        qrCodeUrl: 'https://localhost/api/v1/assets/a1/qr',
+      }),
     ]);
   });
 

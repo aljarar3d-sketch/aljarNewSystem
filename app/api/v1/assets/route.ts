@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { hashApiKey } from '@/lib/api-key';
+import { deriveOrigin } from '@/lib/public-url';
 
 const ASSET_FIELDS = {
   id: true,
@@ -57,5 +58,14 @@ export async function GET(request: Request) {
   // Best-effort — a failed lastUsedAt update shouldn't fail the actual request.
   void prisma.apiKey.update({ where: { id: apiKey.id }, data: { lastUsedAt: new Date() } }).catch(() => {});
 
-  return jsonWithCors(assets);
+  const origin = deriveOrigin(request.headers);
+  const assetsWithLinks = assets.map((asset) => ({
+    ...asset,
+    arUrl: `${origin}/ar/${asset.id}`,
+    // Requires the same Authorization header as this request — see
+    // GET /api/v1/assets/[id]/qr.
+    qrCodeUrl: `${origin}/api/v1/assets/${asset.id}/qr`,
+  }));
+
+  return jsonWithCors(assetsWithLinks);
 }

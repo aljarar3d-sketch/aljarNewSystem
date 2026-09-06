@@ -144,7 +144,9 @@ array of that client's `READY` assets:
     "exposure": 1,
     "toneMapping": "auto",
     "autoRotate": true,
-    "skyboxImage": null
+    "skyboxImage": null,
+    "arUrl": "https://<your-deployment>/ar/clx2222222222222222222222",
+    "qrCodeUrl": "https://<your-deployment>/api/v1/assets/clx2222222222222222222222/qr"
   }
 ]
 ```
@@ -152,6 +154,18 @@ array of that client's `READY` assets:
 `401` for a missing, unknown, or revoked key. CORS is open
 (`Access-Control-Allow-Origin: *`) since this is meant to be called
 from a developer's own app or server.
+
+`arUrl` is the public AR page for that asset (what a QR code should
+point at). `qrCodeUrl` is a ready-made PNG of that same QR code, with
+the ALJAR logo composited in the center (`lib/qr-code.ts`, via the
+`qrcode` + `sharp` packages) — fetching it requires the **same**
+`Authorization: Bearer <key>` header as the list request:
+
+```bash
+curl https://<your-deployment>/api/v1/assets/clx2222222222222222222222/qr \
+  -H "Authorization: Bearer ar_live_..." \
+  -o chair-qr.png
+```
 
 ## Known limitations (by design, see the design spec)
 
@@ -169,6 +183,14 @@ from a developer's own app or server.
   `READY` assets (`GET /api/v1/assets`, `Authorization: Bearer <key>`).
   Keys are created/revoked from `/admin/clients`; the plaintext key is
   shown once at creation and never stored (only its SHA-256 hash is).
+- QR code generation (`lib/qr-code.ts`) depends on `sharp`, a native
+  binary dependency. `npm install` fetches the right prebuilt binary
+  for whatever platform it runs on (this is the same mechanism Next.js
+  itself relies on for image optimization), so it should just work on
+  Vercel's Linux build environment — but this is worth double-checking
+  after the first deploy that includes it, since native-binary
+  mismatches are a common source of "works locally, fails in
+  production" surprises.
 - `/admin/*` is a single sidebar-shell app: sign in once with the admin
   secret (remembered for the browser session via `sessionStorage`, see
   `lib/admin-session.ts`) and every admin page uses it — `/admin`
