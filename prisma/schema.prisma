@@ -60,6 +60,11 @@ model Asset {
   autoRotate      Boolean @default(true)
   skyboxImage     String?
 
+  // A branded PNG QR code pointing at this asset's /ar page, uploaded to
+  // Blob storage (lib/qr-code.ts) so it's a plain public URL — generated
+  // lazily on first request, then cached here.
+  qrCodeUrl String?
+
   @@index([clientId])
   @@index([categoryId])
 }

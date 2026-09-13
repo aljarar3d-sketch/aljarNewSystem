@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { hashApiKey } from '@/lib/api-key';
-import { generateQrCodePng } from '@/lib/qr-code';
+import { getOrCreateQrCodeUrl } from '@/lib/qr-code';
 import { deriveOrigin } from '@/lib/public-url';
 
 interface RouteContext {
@@ -39,20 +39,21 @@ export async function GET(request: Request, { params }: RouteContext) {
 
   // Scoping to `clientId` too means a key can only ever get a QR code for its
   // own client's assets, even if it guesses another client's asset id.
-  const asset = await prisma.asset.findUnique({ where: { id, clientId: apiKey.clientId } });
+  const asset = await prisma.asset.findUnique({
+    where: { id, clientId: apiKey.clientId },
+    select: { id: true, qrCodeUrl: true },
+  });
   if (!asset) {
     return jsonWithCors({ error: 'Asset not found' }, { status: 404 });
   }
 
   const arUrl = `${deriveOrigin(request.headers)}/ar/${asset.id}`;
-  const png = await generateQrCodePng(arUrl);
+  const qrCodeUrl = await getOrCreateQrCodeUrl(asset, arUrl, (assetId, url) =>
+    prisma.asset.update({ where: { id: assetId }, data: { qrCodeUrl: url } }),
+  );
 
-  return new NextResponse(new Uint8Array(png), {
-    status: 200,
-    headers: {
-      ...CORS_HEADERS,
-      'Content-Type': 'image/png',
-      'Cache-Control': 'public, max-age=31536000, immutable',
-    },
-  });
+  // The QR is a plain public Blob file (same one returned as `qrCodeUrl` by
+  // GET /api/v1/assets) — redirect there instead of re-serving the bytes, so
+  // there's one source of truth and callers benefit from Blob's own caching.
+  return NextResponse.redirect(qrCodeUrl, { status: 302, headers: CORS_HEADERS });
 }

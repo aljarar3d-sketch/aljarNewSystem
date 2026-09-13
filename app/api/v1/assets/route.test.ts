@@ -3,15 +3,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@/lib/prisma', () => ({
   default: {
     apiKey: { findUnique: vi.fn(), update: vi.fn() },
-    asset: { findMany: vi.fn() },
+    asset: { findMany: vi.fn(), update: vi.fn() },
   },
 }));
 vi.mock('@/lib/api-key', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/api-key')>();
   return { ...actual, hashApiKey: vi.fn(actual.hashApiKey) };
 });
+vi.mock('@/lib/qr-code', () => ({
+  getOrCreateQrCodeUrl: vi.fn(),
+}));
 
 import prisma from '@/lib/prisma';
+import { getOrCreateQrCodeUrl } from '@/lib/qr-code';
 import { GET } from './route';
 
 function makeRequest(headers?: Record<string, string>, query = '') {
@@ -23,6 +27,8 @@ describe('GET /api/v1/assets', () => {
     vi.mocked(prisma.apiKey.findUnique).mockReset();
     vi.mocked(prisma.apiKey.update).mockReset();
     vi.mocked(prisma.asset.findMany).mockReset();
+    vi.mocked(prisma.asset.update).mockReset();
+    vi.mocked(getOrCreateQrCodeUrl).mockReset();
   });
 
   it('returns 401 when no Authorization header is present', async () => {
@@ -67,22 +73,29 @@ describe('GET /api/v1/assets', () => {
         toneMapping: 'auto',
         autoRotate: true,
         skyboxImage: null,
+        qrCodeUrl: null,
       },
     ] as never);
     vi.mocked(prisma.apiKey.update).mockResolvedValue({} as never);
+    vi.mocked(getOrCreateQrCodeUrl).mockResolvedValue('https://blob.example/qr/a1.png');
 
     const response = await GET(makeRequest({ Authorization: 'Bearer ar_live_valid' }));
 
     expect(response.status).toBe(200);
     expect(prisma.asset.findMany).toHaveBeenCalledWith({
       where: { clientId: 'c1', status: 'READY' },
-      select: expect.objectContaining({ id: true, name: true, glbUrl: true }),
+      select: expect.objectContaining({ id: true, name: true, glbUrl: true, qrCodeUrl: true }),
       orderBy: { createdAt: 'desc' },
     });
     expect(prisma.apiKey.update).toHaveBeenCalledWith({
       where: { id: 'key1' },
       data: { lastUsedAt: expect.any(Date) },
     });
+    expect(getOrCreateQrCodeUrl).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'a1', qrCodeUrl: null }),
+      'https://localhost/ar/a1',
+      expect.any(Function),
+    );
     const json = await response.json();
     expect(json).toEqual([
       expect.objectContaining({
@@ -90,7 +103,7 @@ describe('GET /api/v1/assets', () => {
         name: 'Chair',
         glbUrl: 'https://blob/chair.glb',
         arUrl: 'https://localhost/ar/a1',
-        qrCodeUrl: 'https://localhost/api/v1/assets/a1/qr',
+        qrCodeUrl: 'https://blob.example/qr/a1.png',
       }),
     ]);
   });

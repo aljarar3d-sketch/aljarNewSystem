@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { hashApiKey } from '@/lib/api-key';
 import { deriveOrigin } from '@/lib/public-url';
+import { getOrCreateQrCodeUrl } from '@/lib/qr-code';
 
 const ASSET_FIELDS = {
   id: true,
@@ -17,6 +18,7 @@ const ASSET_FIELDS = {
   toneMapping: true,
   autoRotate: true,
   skyboxImage: true,
+  qrCodeUrl: true,
 } as const;
 
 const CORS_HEADERS = {
@@ -59,13 +61,15 @@ export async function GET(request: Request) {
   void prisma.apiKey.update({ where: { id: apiKey.id }, data: { lastUsedAt: new Date() } }).catch(() => {});
 
   const origin = deriveOrigin(request.headers);
-  const assetsWithLinks = assets.map((asset) => ({
-    ...asset,
-    arUrl: `${origin}/ar/${asset.id}`,
-    // Requires the same Authorization header as this request — see
-    // GET /api/v1/assets/[id]/qr.
-    qrCodeUrl: `${origin}/api/v1/assets/${asset.id}/qr`,
-  }));
+  const assetsWithLinks = await Promise.all(
+    assets.map(async (asset) => {
+      const arUrl = `${origin}/ar/${asset.id}`;
+      const qrCodeUrl = await getOrCreateQrCodeUrl(asset, arUrl, (id, url) =>
+        prisma.asset.update({ where: { id }, data: { qrCodeUrl: url } }),
+      );
+      return { ...asset, arUrl, qrCodeUrl };
+    }),
+  );
 
   return jsonWithCors(assetsWithLinks);
 }

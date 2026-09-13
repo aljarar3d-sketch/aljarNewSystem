@@ -146,7 +146,7 @@ array of that client's `READY` assets:
     "autoRotate": true,
     "skyboxImage": null,
     "arUrl": "https://<your-deployment>/ar/clx2222222222222222222222",
-    "qrCodeUrl": "https://<your-deployment>/api/v1/assets/clx2222222222222222222222/qr"
+    "qrCodeUrl": "https://<blob-store>.public.blob.vercel-storage.com/qr/clx2222222222222222222222.png"
   }
 ]
 ```
@@ -158,11 +158,20 @@ from a developer's own app or server.
 `arUrl` is the public AR page for that asset (what a QR code should
 point at). `qrCodeUrl` is a ready-made PNG of that same QR code, with
 the ALJAR logo composited in the center (`lib/qr-code.ts`, via the
-`qrcode` + `sharp` packages) — fetching it requires the **same**
-`Authorization: Bearer <key>` header as the list request:
+`qrcode` + `sharp` packages) — it's a **plain public Blob URL**, like
+`glbUrl`/`usdzUrl`, so it can be embedded directly (`<img src=...>`)
+with no `Authorization` header needed. It's generated once, the first
+time it's requested for a given asset, then uploaded to Blob storage
+and cached on the `Asset` row (`qrCodeUrl` column) — later requests
+just return the same stored URL instead of regenerating it.
+
+`GET /api/v1/assets/[id]/qr` (same `Authorization: Bearer <key>` as
+the list endpoint) still exists as a convenience — it looks up the
+asset by id and `302`-redirects to its `qrCodeUrl`, generating one
+first if it doesn't have one yet:
 
 ```bash
-curl https://<your-deployment>/api/v1/assets/clx2222222222222222222222/qr \
+curl -L https://<your-deployment>/api/v1/assets/clx2222222222222222222222/qr \
   -H "Authorization: Bearer ar_live_..." \
   -o chair-qr.png
 ```
