@@ -59,5 +59,9 @@ export async function uploadAssetFile({ assetId, fileType, file, adminSecret }: 
     headers: {
       Authorization: `Bearer ${adminSecret}`,
     },
+    // Vercel recommends multipart above ~100MB: it splits the file into
+    // parts uploaded in parallel with per-part retries, instead of one
+    // long single PUT that fails outright on a network hiccup.
+    multipart: true,
   });
 }

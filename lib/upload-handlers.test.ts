@@ -14,6 +14,7 @@ vi.mock('@/lib/admin-auth', () => ({
 
 import prisma from '@/lib/prisma';
 import { isAuthorizedAdminRequest } from '@/lib/admin-auth';
+import { MAX_UPLOAD_SIZE_BYTES } from '@/lib/upload-validation';
 import { authorizeAssetUpload, completeAssetUpload } from './upload-handlers';
 
 const authorizedRequest = new Request('http://localhost/api/upload');
@@ -56,7 +57,7 @@ describe('authorizeAssetUpload', () => {
     );
 
     expect(result.allowedContentTypes).toEqual(['model/gltf-binary']);
-    expect(result.maximumSizeInBytes).toBe(100 * 1024 * 1024);
+    expect(result.maximumSizeInBytes).toBe(MAX_UPLOAD_SIZE_BYTES);
     expect(result.addRandomSuffix).toBe(true);
     expect(JSON.parse(result.tokenPayload)).toEqual({ assetId: 'a1', fileType: 'glb' });
   });

@@ -6,7 +6,7 @@ export const CONTENT_TYPE_BY_FILE_TYPE: Record<AssetFileType, string> = {
   usdz: 'model/vnd.usdz+zip',
 };
 
-export const MAX_UPLOAD_SIZE_BYTES = 100 * 1024 * 1024;
+export const MAX_UPLOAD_SIZE_BYTES = 250 * 1024 * 1024;
 
 export interface UploadTokenPayload {
   assetId: string;

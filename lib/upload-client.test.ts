@@ -35,6 +35,7 @@ describe('uploadAssetFile', () => {
       handleUploadUrl: '/api/upload',
       clientPayload: JSON.stringify({ assetId: 'a1', fileType: 'glb' }),
       headers: { Authorization: 'Bearer dev-admin-secret' },
+      multipart: true,
     });
     expect(result).toEqual({ url: 'https://blob.example/a1.glb' });
   });
